@@ -14,7 +14,6 @@ st.set_page_config(
 
 # gspread üzerinden güvenli Google Sheets bağlantısı kurulması
 @st.cache_resource
-py_gc = None
 def get_gspread_client():
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -43,7 +42,6 @@ def load_data():
 
 def save_data(df):
     """Yeni veriyi Google E-Tablo'ya günceller/yazar."""
-    # Tarihleri string formatına çevir (Google Sheets uyumluluğu için)
     df_to_save = df.copy()
     if "Tarih" in df_to_save.columns:
         df_to_save["Tarih"] = df_to_save["Tarih"].astype(str)
