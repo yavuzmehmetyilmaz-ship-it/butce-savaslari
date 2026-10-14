@@ -12,26 +12,26 @@ st.set_page_config(
     page_title="Bütçe Savaşları", page_icon="⚔️", layout="wide"
 )
 
-# gspread üzerinden güvenli Google Sheets bağlantısı kurulması
+# gspread üzerinden güvenli Google Sheets bağlantısı (isim çakışmasını önlemek için özel fonksiyon adı)
 @st.cache_resource
-def get_gspread_client():
+def get_sheets_connection():
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
     creds_dict = dict(st.secrets["connections.gsheets"])
     credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    return gspread.authorize(credentials)
+    client = gspread.authorize(credentials)
+    spreadsheet_url = st.secrets["connections.gsheets"]["spreadsheet"]
+    return client.open_by_url(spreadsheet_url).worksheet("Sayfa1")
 
-gc = get_gspread_client()
-spreadsheet_url = st.secrets["connections.gsheets"]["spreadsheet"]
-sheet = gc.open_by_url(spreadsheet_url).worksheet("Sayfa1")
+sheet_client = get_sheets_connection()
 
 
 @st.cache_data(ttl=5)
 def load_data():
     """Google E-Tablo'dan verileri çeker."""
-    data = sheet.get_all_records()
+    data = sheet_client.get_all_records()
     df = pd.DataFrame(data)
     # Boş satırları temizle
     df = df.dropna(how="all")
@@ -46,8 +46,8 @@ def save_data(df):
     if "Tarih" in df_to_save.columns:
         df_to_save["Tarih"] = df_to_save["Tarih"].astype(str)
     
-    sheet.clear()
-    sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+    sheet_client.clear()
+    sheet_client.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
     st.cache_data.clear()
 
 
