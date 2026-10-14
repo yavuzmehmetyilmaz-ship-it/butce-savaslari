@@ -12,58 +12,16 @@ st.set_page_config(
     page_title="Bütçe Savaşları", page_icon="⚔️", layout="wide"
 )
 
-# Doğrudan koda gömülü güvenli kimlik bilgileri (Secrets gerektirmez)
 @st.cache_resource
 def get_sheets_connection():
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    
-    creds_dict = {
-        "type": "service_account",
-        "project_id": "butcesavaslari",
-        "private_key_id": "9f08628485a582b1655414d64d548c65730180d6",
-        "private_key": """-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQC2n4wPrtW9Yj3K
-gy6lOKeQ8nXKhXx1ZGWa/KNbJdmssWHFT14AsheFfPpNdRY0IDkemrJRIybLV9LG
-JIGCx1FCFfspDNClJQPffQkBwp8Ezu3g7xbp4IVpYmnSHdvwLvK9YAiUaC1zqEYV
-nq8mQFSYmb6XTGnZAjjujAsNln0SJDVA6NM8RO2XxZDhvpPmohNKpjsqvSflx1+4b
-eGhW0BMVcDXT4jWJLmg3k3FsSoTlTlKjtNVGrxrvGji3eHryDshs7N6cths6Z4Sk
-XWztrcpSjSk6WhCG0yFThjvYVSwGMNU2T82vFWqYXs6RLLAujtrQF4JqanqTF014
-0qvREu6PAgMBAAECggEAB18T8uNxEok59UgA71UEw9UFltHMiZsufr2z2k9XefZZ
-pp04LiRXeWE8uTkArG9LNEZflubUVLY2y8itcZnvWGY1Z8gco+Mv74Ach6BTdYjk
-u9pAEoX9h0NxrLQygdS4okGTbGoda420m9X9932Nt1TKXLsKCuZdgeGarCoW73Ez
-Sc7V4gqC7SVxdcYwyLbd0dIDk8xWUITqHqY8FEAfPJyhC0UEOTRWI9fQ+qrus9Il
-ZGYMMSZv56S+MuHpnr9dhhdBniEp66RhOfU5gR9yUh6P8Q2UN+tjgiBkFQoLoAoA
-AQ0Z4UDv2orwre/K2sMuWDzlnbOGbXIyu9j8ZqtQAQKBgQDppz8QadA54SXg8T2x
-bVrmIKLpzd048sL7ryWGm7zwl3BOZY4Vzzqar5EKLscVSkNgVn1hPlfuZbDtVuYS
-xLIb/AqifdxueWu2QXN9x1jF8HpFTHlG2Rj4nwui+idRTKNRczzPtx2FKPso04vn
-KeVAtIEx3EhTp/irBKxbLznEWQKBgQDIFuIpaGmoveKbDam+h9e+RltbKCSMJ801
-LM47CeTcnV4Q/TnZtHqTcwu+Ocewwi+7eYdlZomnC4rLJ8l0gBr4TM7ogKVIavRe
-B/eI26jQGj8T92iJJYHTyL8oV6aQdWVAoMYQMT5/rdQcG4SUYkWftl7HyaLI45ND
-KLFjPwmNJwKBgHTyMsxiSchOeokF9dzyYQbB2wiu80TnrNQQK/YdyQmaoql6hw0/
-dZOqwCuakiaDzwlPAN5FN/moiE+iqPFH5eW/1wrReB0LRPAp/kY8GqCn5mr9Bc6C
-Js95u3dNQZSdiTjhNtS4UFwv0NX0XBfNjmM+dVOhb8n/TqU6Z5IUJxOxAoGAbEPd
-ifRCP5jHNYi2ES8lsIIXSoK1C9U5dw1QZaeb2zeXP3AVTlQWgxQcBYj0IRNhinpe
-paJO10Eqj3Ru0AfFEBdXWXzKch3VLc/3w2i/tiKNgPs86ACQeAzGSkjrCn1LFSYp
-JXfPznw7Kh5FpZhq/dlK/aV/3F0vQIaTPRVN0L8CgYAOkO6PGUzEgyC9JwkZPbTc
-7JUcR9AnVjWaGYKyCualz2p7JU8CEB1spwEP0zpgWDyBMzA+y/FWuHdqyBdNQG9G
-bNz6xZayANV7MLQ/iwdHhSbFVxjQXmcfkFLPB0WpB3pXh5KqmG5iQIGnOdeQKD2G
-/Z6eSYBGhs5kYRbeA4Sc9g==
------END PRIVATE KEY-----""",
-        "client_email": "butce-bot@butcesavaslari.iam.gserviceaccount.com",
-        "client_id": "105049834209969493987",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/butce-bot%40butcesavaslari.iam.gserviceaccount.com",
-        "universe_domain": "googleapis.com"
-    }
-
+    creds_dict = dict(st.secrets["connections.gsheets"])
     credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(credentials)
-    spreadsheet_url = "https://docs.google.com/spreadsheets/d/1JHAZfbsAxvpT2Fn5XHNjrvf64zZ7BJ6fWmPhWRXqxxY/edit?gid=0#gid=0"
+    spreadsheet_url = st.secrets["connections.gsheets"]["spreadsheet"]
     return client.open_by_url(spreadsheet_url).worksheet("Sayfa1")
 
 sheet_client = get_sheets_connection()
@@ -384,7 +342,7 @@ with tab3:
             myy_df = gider_df[gider_df["Harcamayı Yapan Kim"] == "💙MYY💙"]
             if not myy_df.empty:
                 st.write("#### Üst Kategori Dağılımı")
-                myy_ozet = myy_df.groupby("Üst Keyetgori")["Tutar"].sum().reset_index() if "Üst Keyetgori" in myy_df.columns else myy_df.groupby("Üst Kategori")["Tutar"].sum().reset_index()
+                myy_ozet = myy_df.groupby("Üst Kategori")["Tutar"].sum().reset_index()
                 st.dataframe(myy_ozet, use_container_width=True)
             else:
                 st.info("Bu dönem harcaması yok.")
