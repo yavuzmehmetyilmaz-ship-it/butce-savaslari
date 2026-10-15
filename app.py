@@ -148,6 +148,12 @@ CATEGORIES = {
             "Dergi / Gazete / Üyelik",
             "Spor Salonu Üyeliği",
         ],
+        "Giyim": [
+            "Ezo",
+            "Myy",
+            "Fatih Çınar",
+            "Göktürk",
+        ],
         "Diğer": ["Diğer Gider", "Muhtelif / Tanımsız"],
     },
     "Gelir": {
