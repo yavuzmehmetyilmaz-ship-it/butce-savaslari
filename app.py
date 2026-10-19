@@ -246,6 +246,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Mevcut Dönem Özeti",
     "🏆 Kişi Bazlı Müsabaka & Analiz",
     "📁 Geçmiş Dönem Raporları",
+    "✏️ Kayıt Düzenle / Sil",
 ])
 
 # ------------------------------------------
@@ -427,3 +428,123 @@ with tab4:
 
     st.write("#### Detaylı İşlem Listesi")
     st.dataframe(donem_df)
+# ------------------------------------------
+# SEKME 5: KAYIT DÜZENLE / SİL
+# ------------------------------------------
+with tab5:
+  st.subheader("✏️ Kayıt Düzenle / Sil")
+
+  donemler5 = df["Dönem"].dropna().unique().tolist()
+  if not donemler5:
+    st.info("Düzenlenecek kayıt bulunmuyor.")
+  else:
+    sec = st.selectbox(
+        "Dönem", sorted(donemler5, reverse=True), key="duzenle_donem"
+    )
+    kaynak = (
+        df[df["Dönem"] == sec]
+        .sort_values("Tarih", ascending=False)
+        .reset_index(drop=True)
+    )
+    orijinal_idler = set(kaynak["ID"].dropna().astype(int))
+
+    # Listelerde eski/yeniden adlandırılmış kategoriler de görünsün
+    tum_ust = sorted(
+        {k for t in CATEGORIES.values() for k in t}
+        | set(df["Üst Kategori"].dropna())
+    )
+    tum_alt = sorted(
+        {a for t in CATEGORIES.values() for v in t.values() for a in v}
+        | set(df["Alt Kategori"].dropna())
+    )
+
+    st.caption(
+        "Hücreye çift tıklayıp düzenleyin. Satır silmek için satırı seçip"
+        " çöp kutusuna basın. Bitince 'Değişiklikleri Kaydet'e basın."
+    )
+
+    duzenlenmis = st.data_editor(
+        kaynak.drop(columns=["Dönem"]),
+        key=f"editor_{sec}",
+        num_rows="dynamic",
+        hide_index=True,
+        disabled=["ID"],
+        column_config={
+            "Harcamayı Yapan Kim": st.column_config.SelectboxColumn(
+                options=[EZO, MYY, "Ortak"], required=True
+            ),
+            "Tarih": st.column_config.DateColumn(
+                format="DD.MM.YYYY", required=True
+            ),
+            "Tür": st.column_config.SelectboxColumn(
+                options=["Gider", "Gelir"], required=True
+            ),
+            "Üst Kategori": st.column_config.SelectboxColumn(
+                options=tum_ust, required=True
+            ),
+            "Alt Kategori": st.column_config.SelectboxColumn(
+                options=tum_alt, required=True
+            ),
+            "Tutar": st.column_config.NumberColumn(
+                min_value=0.0, format="%.2f", required=True
+            ),
+        },
+    )
+
+    if st.button("💾 Değişiklikleri Kaydet", type="primary", key="duzenle_kaydet"):
+      yeni = duzenlenmis.copy().reset_index(drop=True)
+      hatalar = []
+
+      zorunlu = [
+          "Harcamayı Yapan Kim", "Tarih", "Tür",
+          "Üst Kategori", "Alt Kategori", "Tutar",
+      ]
+      if yeni[zorunlu].isna().any().any():
+        hatalar.append("Boş hücre var. Zorunlu alanları doldurun.")
+      else:
+        orig = kaynak.set_index("ID")
+        for _, r in yeni.iterrows():
+          rid = r["ID"]
+          degisti = (
+              pd.isna(rid)
+              or rid not in orig.index
+              or any(
+                  r[c] != orig.loc[rid, c]
+                  for c in ("Tür", "Üst Kategori", "Alt Kategori")
+              )
+          )
+          uygun = CATEGORIES.get(r["Tür"], {}).get(r["Üst Kategori"], [])
+          if degisti and r["Alt Kategori"] not in uygun:
+            hatalar.append(
+                f"'{r['Üst Kategori']}' altında '{r['Alt Kategori']}' yok."
+                " Alt kategoriyi üst kategoriye uygun seçin."
+            )
+
+      if hatalar:
+        for h in hatalar:
+          st.error(h)
+      else:
+        # Yazmadan hemen önce taze veriyi çek
+        fresh = load_data()
+        rest = fresh[~fresh["ID"].isin(orijinal_idler)]
+
+        mevcut = pd.to_numeric(fresh["ID"], errors="coerce").dropna()
+        sonraki = int(mevcut.max()) + 1 if not mevcut.empty else 1
+        for i in yeni.index:
+          if pd.isna(yeni.at[i, "ID"]):
+            yeni.at[i, "ID"] = sonraki
+            sonraki += 1
+        yeni["ID"] = yeni["ID"].astype(int)
+        yeni["Dönem"] = yeni["Tarih"].apply(get_financial_period)
+        yeni = yeni[COLUMNS]
+
+        sonuc = pd.concat([rest[COLUMNS], yeni], ignore_index=True)
+        try:
+          save_data(sonuc)
+        except Exception as e:
+          st.error("Kayıt yazılamadı.")
+          st.exception(e)
+          st.stop()
+
+        st.toast("Değişiklikler kaydedildi ✅")
+        st.rerun()
