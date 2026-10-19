@@ -241,7 +241,7 @@ except Exception as e:
 
 current_period = get_financial_period(today_tr())
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "➕ Yeni Kayıt Ekle",
     "📊 Mevcut Dönem Özeti",
     "🏆 Kişi Bazlı Müsabaka & Analiz",
