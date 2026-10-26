@@ -247,7 +247,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏆 Kişi Bazlı Müsabaka & Analiz",
     "📁 Geçmiş Dönem Raporları",
     "✏️ Kayıt Düzenle / Sil",
-    ""🎙️ Sesli Kayıt",
+    "🎙️ Sesli Kayıt",
 ])
 
 # ------------------------------------------
