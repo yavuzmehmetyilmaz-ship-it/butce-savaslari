@@ -241,12 +241,13 @@ except Exception as e:
 
 current_period = get_financial_period(today_tr())
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "➕ Yeni Kayıt Ekle",
     "📊 Mevcut Dönem Özeti",
     "🏆 Kişi Bazlı Müsabaka & Analiz",
     "📁 Geçmiş Dönem Raporları",
     "✏️ Kayıt Düzenle / Sil",
+    ""🎙️ Sesli Kayıt",
 ])
 
 # ------------------------------------------
@@ -548,3 +549,389 @@ with tab5:
 
         st.toast("Değişiklikler kaydedildi ✅")
         st.rerun()
+# ------------------------------------------
+# SEKME 6: SESLİ KAYIT
+# (app.py'nin EN SONUNA ekleyin)
+# Klavye mikrofonuyla yazılan cümleyi çözer, önizleme gösterir, onayla kaydeder.
+# ------------------------------------------
+import re
+from datetime import timedelta
+
+# Klavyenin kişi adlarını nasıl yazdığına göre buraya yazım ekleyebilirsiniz
+EZO_ADLARI = ("ezo",)
+MYY_ADLARI = ("myy", "mıy", "miy")
+
+GELIR_KELIMELERI = (
+    "gelir", "maaş", "maas", "ikramiye", "prim", "yattı", "temettü",
+    "harçlık", "tazminat", "mesai", "kazandı",
+)
+
+# anahtar kelime -> (üst kategori, alt kategori ipucu)
+SES_ANAHTAR = {
+    "Gider": {
+        "market": ("Market", None),
+        "bakkal": ("Market", None),
+        "şarküteri": ("Market", None),
+        "manav": ("Market", "manav"),
+        "sebze": ("Market", "manav"),
+        "meyve": ("Market", "manav"),
+        "temizlik": ("Market", "temizlik"),
+        "benzin": ("Akaryakıt", "benzin"),
+        "motorin": ("Akaryakıt", "motorin"),
+        "mazot": ("Akaryakıt", "motorin"),
+        "lpg": ("Akaryakıt", "lpg"),
+        "akaryakıt": ("Akaryakıt", None),
+        "yakıt": ("Akaryakıt", None),
+        "eczane": ("Sağlık", "eczane"),
+        "ilaç": ("Sağlık", "eczane"),
+        "doktor": ("Sağlık", "muayene"),
+        "hastane": ("Sağlık", "muayene"),
+        "diş": ("Sağlık", "diş"),
+        "otopark": ("Ulaşım", "otopark"),
+        "taksi": ("Ulaşım", "taksi"),
+        "hgs": ("Ulaşım", "otoban"),
+        "köprü": ("Ulaşım", "otoban"),
+        "otoban": ("Ulaşım", "otoban"),
+        "otobüs": ("Ulaşım", "toplu"),
+        "metro": ("Ulaşım", "toplu"),
+        "tamir": ("Bakım Onarım", None),
+        "tadilat": ("Bakım Onarım", "tadilat"),
+        "okul": ("Eğitim", "okul"),
+        "kreş": ("Eğitim", "okul"),
+        "kurs": ("Eğitim", "kurs"),
+        "kitap": ("Eğitim", "kitap"),
+        "kırtasiye": ("Eğitim", "kitap"),
+        "restoran": ("Sosyal Faaliyetler", "dışarıda"),
+        "lokanta": ("Sosyal Faaliyetler", "dışarıda"),
+        "kafe": ("Sosyal Faaliyetler", "dışarıda"),
+        "kahve": ("Sosyal Faaliyetler", "dışarıda"),
+        "yemek": ("Sosyal Faaliyetler", "dışarıda"),
+        "sinema": ("Sosyal Faaliyetler", "sinema"),
+        "tatil": ("Sosyal Faaliyetler", "gezi"),
+        "hediye": ("Sosyal Faaliyetler", "hediye"),
+        "sigorta": ("Sigorta", None),
+        "kasko": ("Sigorta", "kasko"),
+        "dask": ("Sigorta", "dask"),
+        "vergi": ("Vergi", None),
+        "mtv": ("Vergi", "mtv"),
+        "kira": ("Kira & Aidat", "kira"),
+        "aidat": ("Kira & Aidat", "aidat"),
+        "elektrik": ("Fatura", "elektrik"),
+        "doğalgaz": ("Fatura", "doğalgaz"),
+        "internet": ("Fatura", "internet"),
+        "fatura": ("Fatura", None),
+        "netflix": ("Abonelik", "dijital"),
+        "spotify": ("Abonelik", "dijital"),
+        "abonelik": ("Abonelik", None),
+        "bez": ("Çocuk", "bez"),
+        "mama": ("Çocuk", "bez"),
+        "oyuncak": ("Çocuk", "oyuncak"),
+        "aşı": ("Çocuk", "aşı"),
+        "çocuk": ("Çocuk", None),
+        "bebek": ("Çocuk", None),
+        "giyim": ("Giyim", None),
+        "kıyafet": ("Giyim", None),
+        "elbise": ("Giyim", None),
+        "ayakkabı": ("Giyim", None),
+        "borç": ("Borç & Kredi", None),
+        "kredi": ("Borç & Kredi", None),
+        "taksit": ("Borç & Kredi", "taksit"),
+    },
+    "Gelir": {
+        "maaş": ("Maaş", "aylık"),
+        "maas": ("Maaş", "aylık"),
+        "ikramiye": ("Maaş", "ikramiye"),
+        "prim": ("Maaş", "ikramiye"),
+        "mesai": ("Maaş", "tazminat"),
+        "tazminat": ("Maaş", "tazminat"),
+        "kira": ("Ek Ödeme", "kira geliri"),
+        "serbest": ("Ek Ödeme", "serbest"),
+        "satış": ("Ek Ödeme", "satış"),
+        "harçlık": ("Aile Desteği", "harçlık"),
+        "temettü": ("Borsa", "temettü"),
+        "hisse": ("Borsa", "hisse"),
+    },
+}
+
+DURAK = {"diğer", "gider", "gelir", "muhtelif", "tanımsız", "ve", "vb"}
+
+_BIR = {"sıfır": 0, "bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5,
+        "altı": 6, "yedi": 7, "sekiz": 8, "dokuz": 9}
+_ON = {"on": 10, "yirmi": 20, "otuz": 30, "kırk": 40, "elli": 50,
+       "altmış": 60, "yetmiş": 70, "seksen": 80, "doksan": 90}
+_SAYI = re.compile(
+    r"₺?\s*(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)\s*(lira|liralık|tl|₺)?"
+)
+
+
+def _kucuk(s):
+  """Türkçe'ye uygun küçük harfe çevirme."""
+  return s.replace("İ", "i").replace("I", "ı").lower()
+
+
+def _kelime_var(tokens, kelime):
+  if len(kelime) < 4:
+    return kelime in tokens
+  return any(k.startswith(kelime) for k in tokens)
+
+
+def _ad_var(tokens, adlar):
+  return any(
+      k == a or (len(k) <= len(a) + 4 and k.startswith(a))
+      for a in adlar for k in tokens
+  )
+
+
+def _yaziyla_sayi(tokens):
+  """'dört yüz elli lira' -> 450 (yalnızca 'lira/tl' ile bitiyorsa)."""
+  i = 0
+  while i < len(tokens):
+    toplam = cur = 0
+    j = i
+    while j < len(tokens):
+      tok = tokens[j]
+      if tok in _BIR:
+        cur += _BIR[tok]
+      elif tok in _ON:
+        cur += _ON[tok]
+      elif tok == "yüz":
+        cur = (cur or 1) * 100
+      elif tok == "bin":
+        toplam += (cur or 1) * 1000
+        cur = 0
+      else:
+        break
+      j += 1
+    if j > i:
+      deger = toplam + cur
+      if deger > 0 and j < len(tokens) and tokens[j] in ("lira", "liralık", "tl"):
+        return float(deger)
+      i = j
+    else:
+      i += 1
+  return None
+
+
+def _tutar_bul(t, tokens):
+  adaylar = list(_SAYI.finditer(t))
+  if adaylar:
+    secilen = next((m for m in adaylar if m.group(2)), adaylar[0])
+    s = secilen.group(1)
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:,\d+)?", s):
+      s = s.replace(".", "").replace(",", ".")
+    else:
+      s = s.replace(",", ".")
+    return float(s), secilen.span()
+  return _yaziyla_sayi(tokens), None
+
+
+def _kategori_bul(tur, tokens):
+  katlar = CATEGORIES[tur]
+  ust = ipucu = None
+  for kelime, (u, ip) in SES_ANAHTAR[tur].items():
+    if u in katlar and _kelime_var(tokens, kelime):
+      ust, ipucu = u, ip
+      break
+  if ust is None:  # kategori adından otomatik eşleştirme
+    for u in katlar:
+      for w in re.findall(r"[a-zçğıöşü]+", _kucuk(u)):
+        if len(w) >= 4 and w not in DURAK and _kelime_var(tokens, w):
+          ust = u
+          break
+      if ust:
+        break
+  if ust is None:
+    return None, None
+
+  altlar = katlar[ust]
+  alt = None
+  if ipucu:
+    for a in altlar:
+      if ipucu in _kucuk(a):
+        alt = a
+        break
+  if alt is None:
+    for a in altlar:
+      for w in re.findall(r"[a-zçğıöşü]+", _kucuk(a)):
+        if len(w) >= 3 and w not in DURAK and _kelime_var(tokens, w):
+          alt = a
+          break
+      if alt:
+        break
+  return ust, (alt or altlar[0])
+
+
+def ses_coz(metin):
+  orijinal = metin.strip()
+  t = _kucuk(orijinal)
+  tokens = re.findall(r"[a-zçğıöşü0-9]+", t)
+
+  # Kişi
+  ezo = _ad_var(tokens, EZO_ADLARI)
+  myy = _ad_var(tokens, MYY_ADLARI) or "myy" in t.replace(" ", "")
+  if ezo and not myy:
+    kisi = EZO
+  elif myy and not ezo:
+    kisi = MYY
+  elif "ortak" in tokens:
+    kisi = "Ortak"
+  else:
+    kisi = None
+
+  # Tür
+  tur = "Gider"
+  if any(k.startswith(g) for k in tokens for g in GELIR_KELIMELERI):
+    tur = "Gelir"
+  if "vergi" in tokens and not any(k.startswith("iade") for k in tokens):
+    tur = "Gider"
+
+  # Tarih
+  tarih = today_tr()
+  if "dün" in tokens:
+    tarih = tarih - timedelta(days=1)
+  elif "evvelsi" in tokens or "önceki" in tokens:
+    tarih = tarih - timedelta(days=2)
+
+  tutar, span = _tutar_bul(t, tokens)
+  ust, alt = _kategori_bul(tur, tokens)
+
+  # Açıklama: tutar ve kişi adlarını çıkar
+  acik = orijinal
+  if span:
+    acik = acik[: span[0]] + " " + acik[span[1]:]
+  acik = re.sub(
+      r"\b(ezo|myy|ortak)\b(?:['’]\w+)?", " ", acik, flags=re.IGNORECASE
+  )
+  acik = re.sub(r"\s+", " ", acik).strip(" ,.-")
+
+  return {
+      "metin": orijinal,
+      "kisi": kisi,
+      "tur": tur,
+      "tarih": tarih,
+      "ust": ust,
+      "alt": alt,
+      "tutar": tutar,
+      "aciklama": acik or orijinal,
+  }
+
+
+with tab6:
+  st.subheader("🎙️ Sesli Kayıt")
+  st.caption(
+      "Kutuya dokunun, klavyedeki 🎤 ile konuşun. Örnek: 'market harcaması"
+      " MYY 450 lira haftalık alışveriş'. Sonra Çöz'e basın."
+  )
+
+  with st.form("ses_form", clear_on_submit=True):
+    metin = st.text_area(
+        "Komut",
+        height=100,
+        placeholder="market harcaması MYY 450 lira haftalık alışveriş",
+    )
+    coz = st.form_submit_button("🔍 Çöz")
+
+  if coz:
+    if metin.strip():
+      st.session_state["ses_sonuc"] = ses_coz(metin)
+      st.session_state["ses_id"] = st.session_state.get("ses_id", 0) + 1
+    else:
+      st.warning("Önce bir komut söyleyin ya da yazın.")
+
+  sonuc = st.session_state.get("ses_sonuc")
+  if sonuc:
+    sid = st.session_state["ses_id"]
+    st.info(f"🗣️ Anlaşılan: {sonuc['metin']}")
+    if sonuc["kisi"] is None:
+      st.warning("Kişi anlaşılamadı, lütfen seçin.")
+    if sonuc["tutar"] is None:
+      st.warning("Tutar anlaşılamadı, lütfen girin.")
+    if sonuc["ust"] is None:
+      st.warning("Kategori anlaşılamadı, lütfen seçin.")
+
+    kisiler = [EZO, MYY, "Ortak"]
+    c1, c2 = st.columns(2)
+    with c1:
+      kisi_s = st.selectbox(
+          "Kim",
+          kisiler,
+          index=kisiler.index(sonuc["kisi"]) if sonuc["kisi"] in kisiler else None,
+          placeholder="Seçin",
+          key=f"ses_kisi_{sid}",
+      )
+      tur_s = st.selectbox(
+          "Tür",
+          ["Gider", "Gelir"],
+          index=0 if sonuc["tur"] == "Gider" else 1,
+          key=f"ses_tur_{sid}",
+      )
+      tarih_s = st.date_input("Tarih", sonuc["tarih"], key=f"ses_tarih_{sid}")
+    with c2:
+      usts = list(CATEGORIES[tur_s].keys())
+      v_ust = sonuc["ust"] if sonuc["tur"] == tur_s and sonuc["ust"] in usts else usts[0]
+      ust_s = st.selectbox(
+          "Üst Kategori",
+          usts,
+          index=usts.index(v_ust),
+          key=f"ses_ust_{sid}_{tur_s}",
+      )
+      altlar = CATEGORIES[tur_s][ust_s]
+      v_alt = (
+          sonuc["alt"]
+          if sonuc["tur"] == tur_s and sonuc["ust"] == ust_s and sonuc["alt"] in altlar
+          else altlar[0]
+      )
+      alt_s = st.selectbox(
+          "Alt Kategori",
+          altlar,
+          index=altlar.index(v_alt),
+          key=f"ses_alt_{sid}_{tur_s}_{ust_s}",
+      )
+
+    tutar_s = st.number_input(
+        "Tutar (TL)",
+        min_value=0.0,
+        step=10.0,
+        value=float(sonuc["tutar"] or 0.0),
+        key=f"ses_tutar_{sid}",
+    )
+    acik_s = st.text_input(
+        "Açıklama", value=sonuc["aciklama"], key=f"ses_acik_{sid}"
+    )
+
+    b1, b2 = st.columns(2)
+    if b2.button("❌ Vazgeç", key=f"ses_vazgec_{sid}"):
+      st.session_state["ses_sonuc"] = None
+      st.rerun()
+
+    if b1.button("✅ Onayla ve Kaydet", type="primary", key=f"ses_kaydet_{sid}"):
+      if kisi_s is None:
+        st.error("Lütfen kişiyi seçin.")
+      elif tutar_s <= 0:
+        st.error("Tutar 0'dan büyük olmalı.")
+      else:
+        fresh = load_data()
+        ids = pd.to_numeric(fresh["ID"], errors="coerce").dropna()
+        yeni_id = int(ids.max()) + 1 if not ids.empty else 1
+        satir = {
+            "ID": yeni_id,
+            "Harcamayı Yapan Kim": kisi_s,
+            "Tarih": tarih_s,
+            "Tür": tur_s,
+            "Üst Kategori": ust_s,
+            "Alt Kategori": alt_s,
+            "Tutar": float(tutar_s),
+            "Açıklama": acik_s,
+            "Dönem": get_financial_period(tarih_s),
+        }
+        try:
+          save_data(pd.concat([fresh, pd.DataFrame([satir])], ignore_index=True))
+        except Exception as e:
+          st.error("Kayıt yazılamadı.")
+          st.exception(e)
+          st.stop()
+
+        st.session_state["ses_sonuc"] = None
+        st.toast(f"Kaydedildi: {tur_s} {tutar_s:,.2f} TL ✅")
+        st.rerun()
+
